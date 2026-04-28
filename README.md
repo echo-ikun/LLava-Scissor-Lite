@@ -84,7 +84,7 @@ Temporal SCC compression + token merge
                     └────────────────────┬────────────────────┘
                                          │
                          ┌───────────────▼───────────────┐
-                         │        compression/          │
+                         │        compression/           │
                          │  Spatial SCC                  │
                          │  Temporal SCC                 │
                          │  Original-token merge         │
