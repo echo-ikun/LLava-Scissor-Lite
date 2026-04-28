@@ -1,0 +1,30 @@
+架构设计
+
+ 视频 mp4
+   │
+   ▼ decord 均匀采样 N 帧
+ [N, H, W, C]
+   │
+   ▼ SIGLIP 预处理 (resize 384, normalize 0.5/0.5)
+ [N, 3, 384, 384]
+   │
+   ▼ SIGLIP ViT (去掉最后一层 + head=Identity)
+ [N, 729, 1152]    # 27×27 patches
+   │
+   ▼ 2D 双线性池化 (stride=2, 27→14)
+ [N, 196, 1152]    # 14×14 patches
+   │
+   ▼ 投影 MLP (Linear→GELU→Linear)
+ [N, 196, 896]     # 1152 → 896
+   │
+   ▼ flatten
+ [N*196, 896]
+   │
+   ▼ LlavaScissorCompressor (空间SCC → 时间SCC → 合并原始token)
+ [M, 896]          # M ≈ 900 (压缩 70%+)
+   │
+   ▼ 嵌入插入：将文本中的 <image> 替换为 M 个 visual token
+ [text_tokens + M, 896]
+   │
+   ▼ Qwen2-0.5B.generate(inputs_embeds=...)
+ 文本输出
