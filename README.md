@@ -141,14 +141,41 @@ LLava-Scissor-Lite/
 ```bash
 cd <REPO_ROOT>
 
+# 1. 运行原版默认 LLaVA-Scissor (Baseline)
+CUDA_VISIBLE_DEVICES=0 <PYTHON_BIN> inference.py \
+  --backend official \
+  --video <VIDEO_PATH> \
+  --question "Describe briefly."
+
+# 2. 改进一：自适应阈值 (Adaptive Tau)
+# 作用：根据当前帧内特征的复杂度和冗余度动态调整 tau 阈值，简单画面高压缩，复杂场景低压缩，更合理分配算力。
 CUDA_VISIBLE_DEVICES=0 <PYTHON_BIN> inference.py \
   --backend official \
   --video <VIDEO_PATH> \
   --question "Describe briefly." \
-  --max-frames 4 \
-  --max-new-tokens 16 \
-  --seed 123
+  --scissor-adaptive-tau
+
+# 3. 改进二：中心度合并与软分配 (Centrality & Soft Refill)
+# 作用：组件合并时由直接取特征平均（mean）改进为通过特征相似度的中心度（centrality）加权，并且将原始 token 放回时采用 Softmax（soft refill），从而保留更多画面重要细节。
+CUDA_VISIBLE_DEVICES=0 <PYTHON_BIN> inference.py \
+  --backend official \
+  --video <VIDEO_PATH> \
+  --question "Describe briefly." \
+  --scissor-component-merge centrality \
+  --scissor-original-merge-strategy soft
+
+# 4. 改进三：窗口化时序压缩 (Windowed Temporal SCC)
+# 作用：限制时序上只在滑动窗口（例如近 4 帧内）找相似 Token 压缩，防止长视频中不同时间出现的无关相似画面被错误地压在一起。
+CUDA_VISIBLE_DEVICES=0 <PYTHON_BIN> inference.py \
+  --backend official \
+  --video <VIDEO_PATH> \
+  --question "Describe briefly." \
+  --scissor-temporal-strategy windowed \
+  --scissor-temporal-window-size 4
 ```
+
+`reproduce_scissor` 是干嘛的？
+外层庞大的 LLaVA 主库如果想运行我们 `LLava_Scissor_Lite` 最新写的这些压缩逻辑，就需要通过一个桥接模块，`reproduce_scissor` 就是这个**兼容桥梁**的作用。主库源码通过 `import reproduce_scissor.compression` 就能无缝调用这里最新的压缩算法。
 
 预期会看到类似日志：
 
@@ -207,24 +234,7 @@ CUDA_VISIBLE_DEVICES=0 <PYTHON_BIN> inference.py \
   --seed 123
 ```
 
-## 修改压缩算法从哪里开始？
 
-如果要改进方法，优先看这两个文件：
-
-```text
-compression/compressor.py
-compression/components.py
-```
-
-`compressor.py` 对应三段核心逻辑：
-
-```text
-_spatial_compress()
-_temporal_compress()
-_merge_original_tokens()
-```
-
-`components.py` 里是 SCC 的 Union-Find 实现。
 
 ## 模型和视频路径
 
