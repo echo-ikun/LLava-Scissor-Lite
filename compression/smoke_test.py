@@ -78,6 +78,111 @@ def run_smoke_test(device: str, dtype: torch.dtype) -> None:
     print(f"  压缩后: {tuple(compressed.shape)}")
     print(stats)
 
+    run_improvement_smoke_cases(image_feat, tokens_per_frame)
+
+
+def run_improvement_smoke_cases(image_feat: torch.Tensor, tokens_per_frame: int) -> None:
+    """检查新增改进开关的基本契约，不做固定数值金标准。"""
+    baseline, baseline_stats = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        adaptive_tau=False,
+        component_merge="mean",
+        original_merge_strategy="hard",
+        temporal_strategy="global",
+    )
+
+    adaptive, adaptive_stats = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        adaptive_tau=True,
+        adaptive_tau_mode="redundancy",
+        adaptive_tau_min=0.50,
+        adaptive_tau_max=0.95,
+    )
+    assert adaptive.shape[1] == image_feat.shape[1]
+    assert len(adaptive_stats.spatial_frame_taus) == adaptive_stats.frames
+    assert all(0.50 <= tau <= 0.95 for tau in adaptive_stats.spatial_frame_taus)
+    assert torch.isfinite(adaptive).all()
+
+    weighted, weighted_stats = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        component_merge="centrality",
+        component_merge_temperature=0.10,
+        merge_original_tokens=False,
+    )
+    assert weighted.shape[0] == weighted_stats.after_temporal_tokens
+    assert weighted_stats.component_merge == "centrality"
+    assert torch.isfinite(weighted).all()
+
+    soft_refill, soft_refill_stats = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        original_merge_strategy="soft",
+        soft_merge_topk=2,
+        soft_merge_temperature=0.10,
+    )
+    assert soft_refill.shape[0] == soft_refill_stats.final_tokens
+    assert soft_refill_stats.original_merge_strategy == "soft"
+    assert torch.isfinite(soft_refill).all()
+
+    windowed, windowed_stats = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        temporal_strategy="windowed",
+        temporal_window_size=2,
+    )
+    assert 0 < windowed.shape[0] <= baseline_stats.after_spatial_tokens
+    assert windowed_stats.temporal_strategy == "windowed"
+    assert torch.isfinite(windowed).all()
+
+    np.random.seed(11)
+    no_op_baseline, _ = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+    )
+    np.random.seed(11)
+    no_op_windowed, _ = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        temporal_strategy="windowed",
+        temporal_window_size=baseline_stats.frames,
+    )
+    assert torch.allclose(no_op_baseline, no_op_windowed), (
+        "window size >= frame count should match global temporal compression"
+    )
+
+    combined, combined_stats = compress_flat_video_features(
+        image_feat=image_feat,
+        ori_token_num=tokens_per_frame,
+        tau=0.80,
+        epsilon=0.20,
+        adaptive_tau=True,
+        component_merge="centrality",
+        original_merge_strategy="soft",
+        temporal_strategy="windowed",
+        temporal_window_size=2,
+    )
+    assert 0 < combined.shape[0] <= image_feat.shape[0]
+    assert combined_stats.component_merge == "centrality"
+    assert combined_stats.original_merge_strategy == "soft"
+    assert torch.isfinite(combined).all()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LLaVA-Scissor 冒烟测试")

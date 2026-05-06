@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from safetensors.torch import load_file
 
-from compression import LlavaScissorCompressor
+from compression import LlavaScissorCompressor, ScissorConfig
 
 from config import ReproduceScissorConfig
 from inference import GenerationResult, load_video_frames
@@ -40,11 +40,29 @@ class NanoScissorRunner:
         self.projector = None
         self.llm = None
         self.tokenizer = None
-        self.compressor = LlavaScissorCompressor()
+        self.compressor = LlavaScissorCompressor(self._scissor_config())
 
         if self.config.offline:
             os.environ.setdefault("HF_HUB_OFFLINE", "1")
             os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+    def _scissor_config(self) -> ScissorConfig:
+        return ScissorConfig(
+            adaptive_tau=self.config.scissor_adaptive_tau,
+            adaptive_tau_mode=self.config.scissor_adaptive_tau_mode,
+            adaptive_tau_strength=self.config.scissor_adaptive_tau_strength,
+            adaptive_tau_quantile=self.config.scissor_adaptive_tau_quantile,
+            adaptive_tau_min=self.config.scissor_adaptive_tau_min,
+            adaptive_tau_max=self.config.scissor_adaptive_tau_max,
+            component_merge=self.config.scissor_component_merge,
+            component_merge_temperature=self.config.scissor_component_merge_temperature,
+            original_merge_strategy=self.config.scissor_original_merge_strategy,
+            soft_merge_topk=self.config.scissor_soft_merge_topk,
+            soft_merge_temperature=self.config.scissor_soft_merge_temperature,
+            temporal_strategy=self.config.scissor_temporal_strategy,
+            temporal_window_size=self.config.scissor_temporal_window_size,
+            temporal_window_global_refine=self.config.scissor_temporal_window_global_refine,
+        )
 
     def load(self) -> None:
         if self.llm is not None:

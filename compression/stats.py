@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Tuple
 
 
 @dataclass
@@ -14,3 +15,8 @@ class CompressionStats:
     tau: float
     epsilon: float
     elapsed_ms: float
+    spatial_frame_tokens: Tuple[int, ...] = ()
+    spatial_frame_taus: Tuple[float, ...] = ()
+    temporal_strategy: str = "global"
+    component_merge: str = "mean"
+    original_merge_strategy: str = "hard"

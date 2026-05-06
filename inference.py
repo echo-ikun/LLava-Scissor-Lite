@@ -67,6 +67,7 @@ class OfficialScissorRunner:
             device_map=self.config.device_map,
             attn_implementation=self.config.attn_implementation,
         )
+        self._apply_scissor_config()
         self.model.eval()
 
     @torch.no_grad()
@@ -121,6 +122,26 @@ class OfficialScissorRunner:
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(self.config.seed)
 
+    def _apply_scissor_config(self) -> None:
+        """Expose Lite improvement switches to the official LLaVA-Scissor model config."""
+        if self.model is None:
+            return
+        model_config = self.model.config
+        model_config.mm_zip_adaptive_tau = self.config.scissor_adaptive_tau
+        model_config.mm_zip_adaptive_tau_mode = self.config.scissor_adaptive_tau_mode
+        model_config.mm_zip_adaptive_tau_strength = self.config.scissor_adaptive_tau_strength
+        model_config.mm_zip_adaptive_tau_quantile = self.config.scissor_adaptive_tau_quantile
+        model_config.mm_zip_adaptive_tau_min = self.config.scissor_adaptive_tau_min
+        model_config.mm_zip_adaptive_tau_max = self.config.scissor_adaptive_tau_max
+        model_config.mm_zip_component_merge = self.config.scissor_component_merge
+        model_config.mm_zip_component_merge_temperature = self.config.scissor_component_merge_temperature
+        model_config.mm_zip_original_merge_strategy = self.config.scissor_original_merge_strategy
+        model_config.mm_zip_soft_merge_topk = self.config.scissor_soft_merge_topk
+        model_config.mm_zip_soft_merge_temperature = self.config.scissor_soft_merge_temperature
+        model_config.mm_zip_temporal_strategy = self.config.scissor_temporal_strategy
+        model_config.mm_zip_temporal_window_size = self.config.scissor_temporal_window_size
+        model_config.mm_zip_temporal_window_global_refine = self.config.scissor_temporal_window_global_refine
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Faithful slim LLaVA-Scissor inference")
@@ -133,6 +154,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-new-tokens", type=int, default=16)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--online", action="store_true", help="Allow Hugging Face online lookup/downloads")
+    parser.add_argument("--scissor-adaptive-tau", action="store_true")
+    parser.add_argument("--scissor-adaptive-tau-mode", choices=["redundancy", "quantile"], default="redundancy")
+    parser.add_argument("--scissor-adaptive-tau-strength", type=float, default=0.25)
+    parser.add_argument("--scissor-adaptive-tau-quantile", type=float, default=0.85)
+    parser.add_argument("--scissor-adaptive-tau-min", type=float, default=0.50)
+    parser.add_argument("--scissor-adaptive-tau-max", type=float, default=0.995)
+    parser.add_argument("--scissor-component-merge", choices=["mean", "centrality"], default="mean")
+    parser.add_argument("--scissor-component-merge-temperature", type=float, default=0.07)
+    parser.add_argument("--scissor-original-merge-strategy", choices=["hard", "soft"], default="hard")
+    parser.add_argument("--scissor-soft-merge-topk", type=int, default=4)
+    parser.add_argument("--scissor-soft-merge-temperature", type=float, default=0.07)
+    parser.add_argument("--scissor-temporal-strategy", choices=["global", "windowed"], default="global")
+    parser.add_argument("--scissor-temporal-window-size", type=int, default=4)
+    parser.add_argument("--scissor-temporal-window-global-refine", action="store_true")
     return parser.parse_args()
 
 
@@ -149,6 +184,20 @@ def main() -> None:
         device=args.device,
         max_frames=args.max_frames,
         max_new_tokens=args.max_new_tokens,
+        scissor_adaptive_tau=args.scissor_adaptive_tau,
+        scissor_adaptive_tau_mode=args.scissor_adaptive_tau_mode,
+        scissor_adaptive_tau_strength=args.scissor_adaptive_tau_strength,
+        scissor_adaptive_tau_quantile=args.scissor_adaptive_tau_quantile,
+        scissor_adaptive_tau_min=args.scissor_adaptive_tau_min,
+        scissor_adaptive_tau_max=args.scissor_adaptive_tau_max,
+        scissor_component_merge=args.scissor_component_merge,
+        scissor_component_merge_temperature=args.scissor_component_merge_temperature,
+        scissor_original_merge_strategy=args.scissor_original_merge_strategy,
+        scissor_soft_merge_topk=args.scissor_soft_merge_topk,
+        scissor_soft_merge_temperature=args.scissor_soft_merge_temperature,
+        scissor_temporal_strategy=args.scissor_temporal_strategy,
+        scissor_temporal_window_size=args.scissor_temporal_window_size,
+        scissor_temporal_window_global_refine=args.scissor_temporal_window_global_refine,
         offline=not args.online,
         seed=args.seed,
     )

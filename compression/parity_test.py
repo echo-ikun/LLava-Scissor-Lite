@@ -9,7 +9,7 @@ import argparse
 import numpy as np
 import torch
 
-from compression import compress_flat_video_features
+from compression import LlavaScissorCompressor, ScissorConfig, compress_flat_video_features
 from compression.components import approximate_components
 
 
@@ -166,6 +166,40 @@ def run_parity_test(device: str) -> None:
         except AssertionError as e:
             print(f"  [失败] {desc}: {e}")
             failed += 1
+
+    # 明确关闭所有新增开关，保护原始 LLaVA-Scissor 默认行为。
+    np.random.seed(23)
+    expected = original_style_compress(
+        image_feat.clone(), tokens, 0.95, 0.05,
+        enable_temporal=True,
+        merge_original_tokens=True,
+    )
+    np.random.seed(23)
+    explicit_defaults, _ = compress_flat_video_features(
+        image_feat.clone(),
+        tokens,
+        tau=0.95,
+        epsilon=0.05,
+        enable_temporal=True,
+        merge_original_tokens=True,
+        adaptive_tau=False,
+        component_merge="mean",
+        original_merge_strategy="hard",
+        temporal_strategy="global",
+    )
+    np.random.seed(23)
+    config_defaults, _ = LlavaScissorCompressor(
+        ScissorConfig()
+    ).compress_video_tokens(image_feat.clone(), tokens)
+
+    try:
+        assert torch.allclose(expected, explicit_defaults, atol=1e-6, rtol=1e-6)
+        assert torch.allclose(expected, config_defaults, atol=1e-6, rtol=1e-6)
+        print("  [通过] 新增开关显式关闭与 ScissorConfig 默认实例均保持原版一致")
+        passed += 1
+    except AssertionError as e:
+        print(f"  [失败] 新增开关默认兼容性: {e}")
+        failed += 1
 
     # 额外测试：不同输入形状
     extra_shapes = [
